@@ -3,3 +3,8 @@ version: '1.0-SNAPSHOT'
 main: net.saturn.potLimits.PotLimits
 api-version: '1.21'
 authors: [ PumpkinDev ]
+
+permissions:
+  potlimits.admin:
+    description: Allows use of all PotLimits commands
+    default: op

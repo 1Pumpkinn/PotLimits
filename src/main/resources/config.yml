@@ -1,0 +1,7 @@
+# PotLimits Configuration
+# List of disabled potion effects (will be managed automatically by commands)
+disabled-potions: []
+
+# Messages
+messages:
+  potion-blocked: "§cThis potion effect is disabled!"
