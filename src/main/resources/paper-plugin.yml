@@ -2,4 +2,4 @@ name: PotLimits
 version: '1.0-SNAPSHOT'
 main: net.saturn.potLimits.PotLimits
 api-version: '1.21'
-authors: [PumpkinDev]
+authors: [ PumpkinDev ]
