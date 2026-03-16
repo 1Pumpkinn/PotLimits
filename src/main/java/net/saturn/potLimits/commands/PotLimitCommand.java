@@ -38,6 +38,7 @@ public class PotLimitCommand implements BasicCommand {
             case "disable":
                 if (args.length < 2) {
                     sender.sendMessage("§cUsage: /potlimit disable <potion_effect>");
+                    sender.sendMessage("§7Examples: /potlimit disable strength2, /potlimit disable speed");
                     return;
                 }
                 handleDisable(sender, args[1]);
@@ -46,6 +47,7 @@ public class PotLimitCommand implements BasicCommand {
             case "enable":
                 if (args.length < 2) {
                     sender.sendMessage("§cUsage: /potlimit enable <potion_effect>");
+                    sender.sendMessage("§7Examples: /potlimit enable strength2, /potlimit enable speed");
                     return;
                 }
                 handleEnable(sender, args[1]);
@@ -67,45 +69,43 @@ public class PotLimitCommand implements BasicCommand {
 
     private void handleDisable(CommandSender sender, String potionName) {
 
-        String normalizedName = normalizePotionName(potionName);
-        PotionEffectType type = getPotionEffectType(normalizedName);
+        PotionInfo info = parsePotionName(potionName);
 
-        if (type == null) {
+        if (info.type == null) {
             sender.sendMessage("§cInvalid potion effect: " + potionName);
             return;
         }
 
-        if (plugin.getConfigManager().isDisabled(type)) {
-            sender.sendMessage("§e" + formatPotionName(type) + " is already disabled.");
+        if (plugin.getConfigManager().isDisabled(info.type, info.level)) {
+            sender.sendMessage("§e" + formatPotionName(info.type, info.level) + " is already disabled.");
             return;
         }
 
-        plugin.getConfigManager().disablePotion(type);
-        sender.sendMessage("§aDisabled potion effect: " + formatPotionName(type));
+        plugin.getConfigManager().disablePotion(info.type, info.level);
+        sender.sendMessage("§aDisabled potion effect: " + formatPotionName(info.type, info.level));
     }
 
     private void handleEnable(CommandSender sender, String potionName) {
 
-        String normalizedName = normalizePotionName(potionName);
-        PotionEffectType type = getPotionEffectType(normalizedName);
+        PotionInfo info = parsePotionName(potionName);
 
-        if (type == null) {
+        if (info.type == null) {
             sender.sendMessage("§cInvalid potion effect: " + potionName);
             return;
         }
 
-        if (!plugin.getConfigManager().isDisabled(type)) {
-            sender.sendMessage("§e" + formatPotionName(type) + " is already enabled.");
+        if (!plugin.getConfigManager().isDisabled(info.type, info.level)) {
+            sender.sendMessage("§e" + formatPotionName(info.type, info.level) + " is already enabled.");
             return;
         }
 
-        plugin.getConfigManager().enablePotion(type);
-        sender.sendMessage("§aEnabled potion effect: " + formatPotionName(type));
+        plugin.getConfigManager().enablePotion(info.type, info.level);
+        sender.sendMessage("§aEnabled potion effect: " + formatPotionName(info.type, info.level));
     }
 
     private void handleList(CommandSender sender) {
 
-        List<PotionEffectType> disabled = plugin.getConfigManager().getDisabledPotions();
+        Map<PotionEffectType, List<Integer>> disabled = plugin.getConfigManager().getDisabledPotions();
 
         if (disabled.isEmpty()) {
             sender.sendMessage("§eNo potion effects are currently disabled.");
@@ -114,8 +114,19 @@ public class PotLimitCommand implements BasicCommand {
 
         sender.sendMessage("§6§lDisabled Potion Effects:");
 
-        for (PotionEffectType type : disabled) {
-            sender.sendMessage(" §7- §c" + formatPotionName(type));
+        for (Map.Entry<PotionEffectType, List<Integer>> entry : disabled.entrySet()) {
+            PotionEffectType type = entry.getKey();
+            List<Integer> levels = entry.getValue();
+
+            if (levels.contains(-1)) {
+                // All levels disabled
+                sender.sendMessage(" §7- §c" + formatPotionName(type, -1));
+            } else {
+                // Specific levels disabled
+                for (int level : levels) {
+                    sender.sendMessage(" §7- §c" + formatPotionName(type, level));
+                }
+            }
         }
     }
 
@@ -126,35 +137,57 @@ public class PotLimitCommand implements BasicCommand {
         sender.sendMessage(" §e/potlimit enable <effect> §7- Enable a potion effect");
         sender.sendMessage(" §e/potlimit list §7- List disabled effects");
         sender.sendMessage(" §e/potlimit reload §7- Reload configuration");
+        sender.sendMessage("");
+        sender.sendMessage("§7Examples:");
+        sender.sendMessage(" §e/potlimit disable strength2 §7- Disable only Strength II");
+        sender.sendMessage(" §e/potlimit disable strength §7- Disable all levels of Strength");
+        sender.sendMessage(" §e/potlimit enable speed2 §7- Enable Speed II");
     }
 
-    private String normalizePotionName(String input) {
+    /**
+     * Parse potion name with optional level
+     * Examples: "strength2" -> Strength with level 1 (II)
+     *           "strength" -> Strength with level -1 (all levels)
+     *           "speed_2" -> Speed with level 1 (II)
+     */
+    private PotionInfo parsePotionName(String input) {
 
-        return input.toUpperCase()
-                .replace("STRENGTH2", "STRENGTH_2")
-                .replace("STRENGTHII", "STRENGTH_2")
+        String normalized = input.toUpperCase()
                 .replace(" ", "_")
                 .replace("-", "_");
-    }
 
-    private PotionEffectType getPotionEffectType(String name) {
+        // Check for level suffix (2, II, _2, _II)
+        int level = -1; // -1 means all levels
 
-        PotionEffectType type = PotionEffectType.getByName(name);
-
-        if (type != null) {
-            return type;
+        // Pattern: STRENGTH2, STRENGTHII, STRENGTH_2, STRENGTH_II
+        if (normalized.matches(".*[_]?(2|II)$")) {
+            level = 1; // Amplifier 1 = Level II
+            normalized = normalized.replaceAll("[_]?(2|II)$", "");
+        } else if (normalized.matches(".*[_]?(1|I)$")) {
+            level = 0; // Amplifier 0 = Level I
+            normalized = normalized.replaceAll("[_]?(1|I)$", "");
         }
 
-        if (name.endsWith("_2") || name.endsWith("_II")) {
-            String base = name.replaceAll("_(2|II)$", "");
-            return PotionEffectType.getByName(base);
-        }
+        PotionEffectType type = PotionEffectType.getByName(normalized);
 
-        return null;
+        return new PotionInfo(type, level);
     }
 
-    private String formatPotionName(PotionEffectType type) {
-        return type.getName().toLowerCase().replace("_", " ");
+    /**
+     * Format potion name for display
+     */
+    private String formatPotionName(PotionEffectType type, int level) {
+        String base = type.getName().toLowerCase().replace("_", " ");
+
+        if (level == -1) {
+            return base + " (all levels)";
+        } else if (level == 0) {
+            return base + " I";
+        } else if (level == 1) {
+            return base + " II";
+        } else {
+            return base + " " + (level + 1);
+        }
     }
 
     // Tab completion (Paper automatically detects this method)
@@ -186,11 +219,16 @@ public class PotLimitCommand implements BasicCommand {
 
             List<String> potions = Arrays.asList(
                     "strength",
+                    "strength1",
                     "strength2",
                     "speed",
+                    "speed1",
                     "speed2",
                     "jump_boost",
+                    "jump_boost1",
+                    "jump_boost2",
                     "regeneration",
+                    "regeneration1",
                     "regeneration2",
                     "fire_resistance",
                     "water_breathing",
@@ -198,8 +236,14 @@ public class PotLimitCommand implements BasicCommand {
                     "night_vision",
                     "weakness",
                     "poison",
+                    "poison1",
+                    "poison2",
                     "slowness",
+                    "slowness1",
+                    "slowness4",
                     "turtle_master",
+                    "turtle_master1",
+                    "turtle_master2",
                     "slow_falling"
             );
 
@@ -209,5 +253,18 @@ public class PotLimitCommand implements BasicCommand {
         }
 
         return Collections.emptyList();
+    }
+
+    /**
+     * Helper class to store parsed potion information
+     */
+    private static class PotionInfo {
+        final PotionEffectType type;
+        final int level; // -1 = all levels, 0 = I, 1 = II, etc.
+
+        PotionInfo(PotionEffectType type, int level) {
+            this.type = type;
+            this.level = level;
+        }
     }
 }
